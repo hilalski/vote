@@ -3,14 +3,17 @@
 namespace Tests\Feature;
 
 use App\Exceptions\FinalizationBlockedException;
+use App\Exceptions\VotingUnavailableException;
 use App\Mail\VotingInvitation;
 use App\Models\User;
+use App\Models\Vote;
 use App\Models\VotingRound;
 use App\Models\VotingToken;
 use App\Services\VotingResultsService;
 use App\Services\VotingRoundService;
 use App\Services\VotingService;
 use App\Services\VotingTokenService;
+use Database\Seeders\VoterSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +25,46 @@ use Tests\TestCase;
 class VotingFlowTest extends TestCase
 {
     use LazilyRefreshDatabase;
+
+    public function test_voter_seeder_imports_the_excel_source_during_database_seeding(): void
+    {
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getActiveSheet()->fromArray([
+            ['email', 'name', 'cant_be_voted'],
+            ['voter@example.test', 'Pemilih Biasa', 0],
+            ['blocked@example.test', 'Pemilih Tidak Dapat Dipilih', 1],
+        ], null, 'A1');
+        $source = tempnam(sys_get_temp_dir(), 'voter-seeder-');
+        (new Xlsx($spreadsheet))->save($source);
+
+        try {
+            new class($source) extends VoterSeeder
+            {
+                public function __construct(private string $source) {}
+
+                protected function spreadsheetSource(): string
+                {
+                    return $this->source;
+                }
+            }->run();
+        } finally {
+            unlink($source);
+        }
+
+        $this->assertDatabaseCount('users', 2);
+        $this->assertDatabaseHas('users', ['email' => 'voter@example.test', 'name' => 'Pemilih Biasa', 'cant_be_voted' => false]);
+        $this->assertDatabaseHas('users', ['email' => 'blocked@example.test', 'name' => 'Pemilih Tidak Dapat Dipilih', 'cant_be_voted' => true]);
+    }
+
+    public function test_voter_seeder_imports_all_voters_from_the_project_excel_source(): void
+    {
+        app(VoterSeeder::class)->run();
+
+        $this->assertGreaterThan(4, User::query()->count());
+        $this->assertDatabaseHas('users', ['email' => 'aidil@bps.go.id', 'name' => 'Aidil Adha SE, ME', 'cant_be_voted' => true]);
+        $this->assertDatabaseHas('users', ['email' => 'novam@bps.go.id', 'name' => 'Nova Moestafa, S.ST., M.Si.', 'cant_be_voted' => true]);
+        $this->assertDatabaseHas('users', ['email' => 'aisyah.bintang@bps.go.id', 'name' => 'Aisyah Bintang, S.Tr.Stat.', 'cant_be_voted' => false]);
+    }
 
     public function test_valid_token_authenticates_a_voter_session(): void
     {
@@ -70,6 +113,20 @@ class VotingFlowTest extends TestCase
             ->assertSessionHas('error', 'Anda sudah memberikan suara pada putaran ini.');
 
         $this->assertDatabaseCount('votes', 1);
+    }
+
+    public function test_many_eligible_voters_can_cast_votes_without_serializing_the_round(): void
+    {
+        $voters = User::factory()->count(120)->create();
+        $round = $this->openRoundOne($voters->all());
+        $candidate = $voters->first();
+
+        foreach ($voters as $voter) {
+            app(VotingService::class)->cast($voter, $candidate->id);
+        }
+
+        $this->assertDatabaseCount('votes', 120);
+        $this->assertSame(120, Vote::query()->where('round_id', $round->id)->where('candidate_id', $candidate->id)->count());
     }
 
     public function test_voter_ballot_uses_a_name_search_and_does_not_render_candidate_emails(): void
@@ -266,7 +323,28 @@ class VotingFlowTest extends TestCase
         $this->assertStringContainsString($voters->get(1)->name, $audit->streamedContent());
     }
 
-    public function test_open_round_hides_live_results_and_reveals_them_in_a_modal_after_closing(): void
+    public function test_administrator_can_update_an_open_round_schedule(): void
+    {
+        $voters = User::factory()->count(3)->create();
+        $round = $this->openRoundOne($voters->all());
+        $admin = User::factory()->admin()->create();
+        $startsAt = now(config('voting.timezone'))->subMinute()->startOfMinute();
+        $endsAt = $startsAt->copy()->addHours(2);
+
+        $this->actingAs($admin)
+            ->post(route('admin.voting.rounds.schedule', $round), [
+                'starts_at' => $startsAt->format('Y-m-d\\TH:i'),
+                'ends_at' => $endsAt->format('Y-m-d\\TH:i'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $round->refresh();
+        $this->assertTrue($round->starts_at->equalTo($startsAt->utc()));
+        $this->assertTrue($round->ends_at->equalTo($endsAt->utc()));
+    }
+
+    public function test_open_round_one_shows_live_rankings_but_keeps_voter_choices_hidden_until_closing(): void
     {
         $voters = User::factory()->count(3)->create();
         $round = $this->openRoundOne($voters->all());
@@ -276,7 +354,8 @@ class VotingFlowTest extends TestCase
         $this->actingAs($admin)
             ->get(route('admin.voting.rounds.show', $round))
             ->assertOk()
-            ->assertSee('Kandidat Terdaftar')
+            ->assertSee('Peringkat Kandidat')
+            ->assertSee($voters->get(1)->name)
             ->assertSee('Audit Partisipasi Pemilih')
             ->assertDontSee('Kandidat dipilih')
             ->assertDontSee('Export CSV');
@@ -290,6 +369,23 @@ class VotingFlowTest extends TestCase
             ->assertOk()
             ->assertSee('id="closed-results-modal"', false)
             ->assertSee('Export CSV');
+    }
+
+    public function test_open_round_two_keeps_rankings_hidden_until_closing(): void
+    {
+        $voters = User::factory()->count(4)->create();
+        [, $roundTwo] = $this->prepareRoundTwo($voters->all());
+        app(VotingRoundService::class)->open($roundTwo, $voters->first());
+        app(VotingService::class)->cast($voters->first(), $voters->first()->id);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->get(route('admin.voting.rounds.show', $roundTwo))
+            ->assertOk()
+            ->assertSee('Kandidat Terdaftar')
+            ->assertSee('Audit Partisipasi Pemilih')
+            ->assertDontSee('Peringkat Kandidat')
+            ->assertDontSee('Kandidat dipilih');
     }
 
     public function test_round_two_first_place_tie_does_not_create_a_winner(): void
@@ -421,28 +517,56 @@ class VotingFlowTest extends TestCase
         $admin = User::factory()->admin()->create();
         $existingVoter = User::factory()->inactive()->create(['email' => 'existing@example.test']);
         $otherVoter = User::factory()->create();
+        $currentRound = VotingRound::factory()->create([
+            'round_number' => 1,
+            'name' => 'Penjaringan',
+            'status' => VotingRound::STATUS_OPEN,
+            'starts_at' => now('UTC')->subHour(),
+            'ends_at' => now('UTC')->addDay(),
+        ]);
+        $draftRound = VotingRound::factory()->create([
+            'round_number' => 2,
+            'name' => 'Final',
+            'starts_at' => now('UTC')->addDays(2),
+            'ends_at' => now('UTC')->addDays(3),
+        ]);
+        DB::table('round_candidates')->insert([
+            'round_id' => $currentRound->id,
+            'user_id' => $otherVoter->id,
+            'created_at' => now('UTC'),
+        ]);
         $tokens = app(VotingTokenService::class);
         $existingToken = $tokens->issue($existingVoter, now('UTC')->addDay());
         $otherToken = $tokens->issue($otherVoter, now('UTC')->addDay());
         $tokenCount = VotingToken::query()->count();
 
         $file = $this->voterImportFile([
-            ['nama', 'email'],
-            ['Nama Pemilih Diperbarui', $existingVoter->email],
-            ['Pemilih Baru', 'baru@example.test'],
+            ['nama', 'email', 'cant_be_voted'],
+            ['Nama Pemilih Diperbarui', $existingVoter->email, 0],
+            ['Pemilih Baru', 'baru@example.test', 1],
         ]);
 
         $this->actingAs($admin)
             ->post(route('admin.voting.voters.import'), ['voters_file' => $file])
             ->assertRedirect()
-            ->assertSessionHas('success', 'Import selesai: 1 pemilih baru dan 1 pemilih diperbarui. Token yang sudah ada tidak diubah.');
+            ->assertSessionHas('success', 'Import selesai: 1 pemilih baru dan 1 pemilih diperbarui. 1 token dibuat untuk pemilih baru; token pemilih lama tidak diubah. 2 pemilih ditambahkan ke putaran yang sedang berjalan.');
 
         $this->assertDatabaseHas('users', ['email' => $existingVoter->email, 'name' => 'Nama Pemilih Diperbarui', 'is_active' => true]);
-        $this->assertDatabaseHas('users', ['email' => 'baru@example.test', 'name' => 'Pemilih Baru', 'is_active' => true, 'is_admin' => false]);
-        $this->assertSame($tokenCount, VotingToken::query()->count());
+        $this->assertDatabaseHas('users', ['email' => 'baru@example.test', 'name' => 'Pemilih Baru', 'is_active' => true, 'is_admin' => false, 'cant_be_voted' => true]);
+        $newVoter = User::query()->where('email', 'baru@example.test')->firstOrFail();
+        $newToken = VotingToken::query()->where('user_id', $newVoter->id)->sole();
+
+        $this->assertSame($tokenCount + 1, VotingToken::query()->count());
         $this->assertSame($existingVoter->id, $tokens->authenticate($existingToken['token'])?->id);
         $this->assertSame($otherVoter->id, $tokens->authenticate($otherToken['token'])?->id);
-        $this->assertDatabaseMissing('voting_tokens', ['user_id' => User::query()->where('email', 'baru@example.test')->value('id')]);
+        $this->assertSame($newVoter->id, $tokens->authenticate($newToken->token_ciphertext)?->id);
+        $this->assertDatabaseHas('round_eligible_voters', ['round_id' => $currentRound->id, 'user_id' => $existingVoter->id]);
+        $this->assertDatabaseHas('round_eligible_voters', ['round_id' => $currentRound->id, 'user_id' => $newVoter->id]);
+        $this->assertDatabaseMissing('round_eligible_voters', ['round_id' => $draftRound->id, 'user_id' => $newVoter->id]);
+        $this->assertDatabaseMissing('round_candidates', ['round_id' => $currentRound->id, 'user_id' => $newVoter->id]);
+
+        app(VotingService::class)->cast($newVoter, $otherVoter->id);
+        $this->assertDatabaseHas('votes', ['round_id' => $currentRound->id, 'voter_id' => $newVoter->id, 'candidate_id' => $otherVoter->id]);
     }
 
     public function test_admin_dashboard_rejects_guests_and_allows_an_authorized_admin(): void
@@ -482,6 +606,37 @@ class VotingFlowTest extends TestCase
         $this->assertFalse($round->candidates()->whereKey($administrator->id)->exists());
         $this->assertCount(3, $round->fresh()->eligibleVoters);
         $this->assertCount(3, $round->fresh()->candidates);
+    }
+
+    public function test_a_voter_marked_cant_be_voted_can_vote_but_cannot_be_selected_as_a_candidate(): void
+    {
+        $excludedVoter = User::factory()->create(['cant_be_voted' => true]);
+        $candidate = User::factory()->create();
+        $otherVoter = User::factory()->create();
+        $round = VotingRound::factory()->create([
+            'round_number' => 1,
+            'name' => 'Penjaringan',
+            'starts_at' => now('UTC')->subHour(),
+            'ends_at' => now('UTC')->addDay(),
+        ]);
+
+        app(VotingRoundService::class)->open($round, $candidate);
+
+        $this->assertTrue($round->eligibleVoters()->whereKey($excludedVoter->id)->exists());
+        $this->assertFalse($round->candidates()->whereKey($excludedVoter->id)->exists());
+        $this->assertTrue($round->candidates()->whereKey($candidate->id)->exists());
+
+        try {
+            app(VotingService::class)->cast($candidate, $excludedVoter->id);
+            $this->fail('Pemilih dengan cant_be_voted tidak boleh menjadi kandidat.');
+        } catch (VotingUnavailableException) {
+            $this->assertDatabaseCount('votes', 0);
+        }
+
+        app(VotingService::class)->cast($excludedVoter, $candidate->id);
+
+        $this->assertDatabaseHas('votes', ['round_id' => $round->id, 'voter_id' => $excludedVoter->id, 'candidate_id' => $candidate->id]);
+        $this->assertTrue($round->eligibleVoters()->whereKey($otherVoter->id)->exists());
     }
 
     /**

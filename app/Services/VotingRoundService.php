@@ -23,8 +23,8 @@ class VotingRoundService
         return DB::transaction(function () use ($round, $startsAt, $endsAt, $actor): VotingRound {
             $lockedRound = $this->lockedRound($round);
 
-            if ($lockedRound->status !== VotingRound::STATUS_DRAFT) {
-                throw new VotingUnavailableException('Jadwal hanya dapat diubah saat putaran masih draf.');
+            if (! in_array($lockedRound->status, [VotingRound::STATUS_DRAFT, VotingRound::STATUS_OPEN], true)) {
+                throw new VotingUnavailableException('Jadwal hanya dapat diubah saat putaran masih draf atau terbuka.');
             }
 
             $lockedRound->update(['starts_at' => $startsAt, 'ends_at' => $endsAt]);
@@ -104,6 +104,7 @@ class VotingRoundService
 
             $selectedCandidateIds = $lockedRound->candidates()
                 ->whereIn('users.id', $finalistIds)
+                ->where('users.cant_be_voted', false)
                 ->pluck('users.id')
                 ->map(fn (mixed $id): int => (int) $id)
                 ->sort()
@@ -226,23 +227,35 @@ class VotingRoundService
         }
 
         $timestamp = now('UTC');
-        $userIds = User::query()
+        $eligibleUsers = User::query()
             ->where('is_active', true)
             ->where('is_admin', false)
             ->orderBy('id')
-            ->pluck('id');
-        $eligibleRows = $userIds->map(fn (mixed $userId): array => [
+            ->get(['id', 'cant_be_voted']);
+        $eligibleRows = $eligibleUsers->map(fn (User $user): array => [
             'round_id' => $round->id,
-            'user_id' => $userId,
+            'user_id' => $user->id,
             'created_at' => $timestamp,
         ])->all();
+        $candidateRows = $eligibleUsers
+            ->where('cant_be_voted', false)
+            ->map(fn (User $user): array => [
+                'round_id' => $round->id,
+                'user_id' => $user->id,
+                'created_at' => $timestamp,
+            ])
+            ->all();
 
         if ($eligibleRows === []) {
             throw new VotingUnavailableException('Tidak ada pemilih aktif untuk snapshot Putaran 1.');
         }
 
+        if ($candidateRows === []) {
+            throw new VotingUnavailableException('Tidak ada kandidat yang dapat dipilih untuk snapshot Putaran 1.');
+        }
+
         DB::table('round_eligible_voters')->insert($eligibleRows);
-        DB::table('round_candidates')->insert($eligibleRows);
+        DB::table('round_candidates')->insert($candidateRows);
     }
 
     private function prepareRoundTwo(VotingRound $round): void
@@ -258,6 +271,10 @@ class VotingRoundService
 
         if ($round->candidates()->count() !== 3) {
             throw new VotingUnavailableException('Putaran 2 memerlukan tepat tiga finalis yang sudah terkunci.');
+        }
+
+        if ($round->candidates()->where('users.cant_be_voted', true)->exists()) {
+            throw new VotingUnavailableException('Finalis Putaran 2 memuat pengguna yang tidak dapat dipilih.');
         }
 
         if (! $round->eligibleVoters()->exists()) {

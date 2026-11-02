@@ -27,12 +27,13 @@
                     <div class="card-body"><h5 class="card-title">Jadwal Putaran</h5>
                         <div class="vstack gap-4">
                             @foreach ($rounds as $round)
+                                @php($scheduleEditable = in_array($round->status, ['draft', 'open'], true))
                                 <form class="row g-3 align-items-end" method="POST" action="{{ route('admin.voting.rounds.schedule', $round) }}">
                                     @csrf
-                                    <div class="col-12"><strong>Putaran {{ $round->round_number }} — {{ $round->name }}</strong><span class="ms-2 small text-muted">Hanya saat status draf</span></div>
-                                    <div class="col-md-5"><label class="form-label">Mulai (WIB)</label><input class="form-control" {{ $round->status !== 'draft' ? 'disabled' : '' }} name="starts_at" required type="datetime-local" value="{{ $round->starts_at->timezone(config('voting.timezone'))->format('Y-m-d\\TH:i') }}"></div>
-                                    <div class="col-md-5"><label class="form-label">Berakhir (WIB)</label><input class="form-control" {{ $round->status !== 'draft' ? 'disabled' : '' }} name="ends_at" required type="datetime-local" value="{{ $round->ends_at->timezone(config('voting.timezone'))->format('Y-m-d\\TH:i') }}"></div>
-                                    <div class="col-md-2"><button class="btn btn-outline-primary w-100" {{ $round->status !== 'draft' ? 'disabled' : '' }} type="submit">Simpan</button></div>
+                                    <div class="col-12"><strong>Putaran {{ $round->round_number }} — {{ $round->name }}</strong><span class="ms-2 small text-muted">Dapat diubah saat status draf atau terbuka</span></div>
+                                    <div class="col-md-5"><label class="form-label">Mulai (WIB)</label><input class="form-control" {{ ! $scheduleEditable ? 'disabled' : '' }} name="starts_at" required type="datetime-local" value="{{ $round->starts_at->timezone(config('voting.timezone'))->format('Y-m-d\\TH:i') }}"></div>
+                                    <div class="col-md-5"><label class="form-label">Berakhir (WIB)</label><input class="form-control" {{ ! $scheduleEditable ? 'disabled' : '' }} name="ends_at" required type="datetime-local" value="{{ $round->ends_at->timezone(config('voting.timezone'))->format('Y-m-d\\TH:i') }}"></div>
+                                    <div class="col-md-2"><button class="btn btn-outline-primary w-100" {{ ! $scheduleEditable ? 'disabled' : '' }} type="submit">Simpan</button></div>
                                 </form>
                             @endforeach
                         </div>

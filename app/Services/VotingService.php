@@ -15,50 +15,54 @@ class VotingService
     public function cast(User $voter, int $candidateId): Vote
     {
         try {
-            return DB::transaction(function () use ($voter, $candidateId): Vote {
-                $now = now('UTC');
-                $round = VotingRound::query()
-                    ->where('status', VotingRound::STATUS_OPEN)
-                    ->where('starts_at', '<=', $now)
-                    ->where('ends_at', '>', $now)
-                    ->lockForUpdate()
-                    ->first();
+            $now = now('UTC');
+            $round = VotingRound::query()
+                ->where('status', VotingRound::STATUS_OPEN)
+                ->where('starts_at', '<=', $now)
+                ->where('ends_at', '>', $now)
+                ->orderBy('round_number')
+                ->first();
 
-                if ($round === null) {
-                    throw new VotingUnavailableException('Tidak ada putaran voting yang sedang dibuka.');
-                }
+            if ($round === null) {
+                throw new VotingUnavailableException('Tidak ada putaran voting yang sedang dibuka.');
+            }
 
-                if (! User::query()->whereKey($voter->id)->where('is_active', true)->exists()) {
-                    throw new VotingUnavailableException('Akun Anda tidak aktif untuk voting saat ini.');
-                }
+            if (! User::query()->whereKey($voter->id)->where('is_active', true)->exists()) {
+                throw new VotingUnavailableException('Akun Anda tidak aktif untuk voting saat ini.');
+            }
 
-                $isEligible = DB::table('round_eligible_voters')
-                    ->where('round_id', $round->id)
-                    ->where('user_id', $voter->id)
-                    ->exists();
-                $isCandidate = DB::table('round_candidates')
-                    ->where('round_id', $round->id)
-                    ->where('user_id', $candidateId)
-                    ->exists();
+            $voteSelection = DB::table('round_eligible_voters as eligible_voters')
+                ->join('voting_rounds as rounds', 'rounds.id', '=', 'eligible_voters.round_id')
+                ->join('round_candidates as candidates', function ($join) use ($candidateId): void {
+                    $join->on('candidates.round_id', '=', 'eligible_voters.round_id')
+                        ->where('candidates.user_id', '=', $candidateId);
+                })
+                ->join('users as voters', 'voters.id', '=', 'eligible_voters.user_id')
+                ->join('users as candidate_users', 'candidate_users.id', '=', 'candidates.user_id')
+                ->where('eligible_voters.round_id', $round->id)
+                ->where('eligible_voters.user_id', $voter->id)
+                ->where('voters.is_active', true)
+                ->where('candidate_users.cant_be_voted', false)
+                ->where('rounds.status', VotingRound::STATUS_OPEN)
+                ->where('rounds.starts_at', '<=', $now)
+                ->where('rounds.ends_at', '>', $now)
+                ->selectRaw('eligible_voters.round_id, ?, ?, ?', [$voter->id, $candidateId, $now]);
 
-                if (! $isEligible || ! $isCandidate) {
-                    throw new VotingUnavailableException('Pilihan tidak tersedia untuk putaran voting ini.');
-                }
+            $inserted = DB::table('votes')->insertUsing(
+                ['round_id', 'voter_id', 'candidate_id', 'created_at'],
+                $voteSelection,
+            );
 
-                if (Vote::query()->where('round_id', $round->id)->where('voter_id', $voter->id)->exists()) {
-                    throw new AlreadyVotedException('Anda sudah memberikan suara pada putaran ini.');
-                }
+            if (! $inserted) {
+                throw new VotingUnavailableException('Pilihan tidak tersedia untuk putaran voting ini.');
+            }
 
-                return Vote::create([
-                    'round_id' => $round->id,
-                    'voter_id' => $voter->id,
-                    'candidate_id' => $candidateId,
-                ]);
-            }, 3);
+            return Vote::query()
+                ->where('round_id', $round->id)
+                ->where('voter_id', $voter->id)
+                ->firstOrFail();
         } catch (QueryException $exception) {
-            $activeRound = VotingRound::query()->where('status', VotingRound::STATUS_OPEN)->first();
-
-            if ($activeRound !== null && Vote::query()->where('round_id', $activeRound->id)->where('voter_id', $voter->id)->exists()) {
+            if (isset($round) && Vote::query()->where('round_id', $round->id)->where('voter_id', $voter->id)->exists()) {
                 throw new AlreadyVotedException('Anda sudah memberikan suara pada putaran ini.');
             }
 

@@ -5,7 +5,7 @@
         <span class="brand-mark"><i class="bi bi-check2-square"></i></span>
         <div>
             <h1 class="h3 fw-bold mb-1">Pemilihan Ketua HAISSTIS</h1>
-            <p class="text-muted mb-0">Periode 2026 - Kapan</p>
+            <p class="text-muted mb-0">Periode 2026 - 2030</p>
         </div>
         @if ($voter !== null)
             <form class="ms-auto" method="POST" action="{{ route('voting.logout') }}">
@@ -49,16 +49,16 @@
     @else
         <section class="card voting-card">
             <div class="card-body">
-                <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
-                    <div>
+                <div class="row g-3 align-items-start mb-4">
+                    <div class="col-lg">
                         <span class="badge badge-soft-blue rounded-pill px-3 py-2">Halo, {{ $voter->name }}</span>
                         <h2 class="mt-3 mb-1">
-                            {{ $round?->round_number === 1 ? 'Putaran 1 — Penjaringan' : ($round?->round_number === 2 ? 'Putaran 2 — Pemilihan Final' : 'Status Voting') }}
+                            {{ $round?->round_number === 1 ? 'Putaran 1 - Penjaringan Calon Ketua' : ($round?->round_number === 2 ? 'Putaran 2 - Pemilihan Ketua HAISSTIS Jambi' : 'Status Voting') }}
                         </h2>
                         <p class="text-muted mb-0">{{ $statusMessage }}</p>
                     </div>
                     @if ($round !== null)
-                        <div class="text-lg-end small text-muted">
+                        <div class="col-lg-auto text-lg-end small text-muted">
                             <div>Berakhir</div>
                             <strong>{{ $round->ends_at->timezone(config('voting.timezone'))->translatedFormat('d F Y, H:i') }}
                                 WIB</strong>

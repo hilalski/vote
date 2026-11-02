@@ -16,7 +16,7 @@
                 <section class="card">
                     <div class="card-body">
                         <div class="d-flex align-items-center justify-content-between gap-3">
-                            <h5 class="card-title mb-3">{{ $resultsVisible ? 'Peringkat Kandidat' : 'Kandidat Terdaftar' }}
+                            <h5 class="card-title mb-3">{{ $rankingsVisible ? 'Peringkat Kandidat' : 'Kandidat Terdaftar' }}
                             </h5>
                             @if ($resultsVisible)
                                 <a class="btn btn-sm btn-outline-primary mb-3"
@@ -24,7 +24,7 @@
                                         class="bi bi-download me-1"></i>Export CSV</a>
                             @endif
                         </div>
-                        @if (!$resultsVisible)
+                        @if (!$rankingsVisible)
                             <p class="small text-muted">Peringkat dan perolehan suara baru tersedia setelah putaran ditutup.
                             </p>
                         @endif
@@ -32,18 +32,18 @@
                             <table class="table align-middle">
                                 <thead>
                                     <tr>
-                                        @if ($resultsVisible)
+                                        @if ($rankingsVisible)
                                             <th>Peringkat</th>
                                         @endif
                                         <th>
                                             Kandidat</th>
-                                        @if ($resultsVisible)
+                                        @if ($rankingsVisible)
                                             <th class="text-end">Suara</th>
                                         @endif
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @if ($resultsVisible)
+                                    @if ($rankingsVisible)
                                         @forelse ($rankings as $index => $candidate)
                                             <tr>
                                                 <td>{{ $index + 1 }}</td>

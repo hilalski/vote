@@ -31,7 +31,7 @@ class VotingController extends Controller
             : Vote::query()->with('candidate:id,name')->where('round_id', $round->id)->where('voter_id', $voter->id)->first();
         $isEligible = $voter !== null && $round !== null && $round->eligibleVoters()->whereKey($voter->id)->exists();
         $candidates = $round !== null && $isEligible && $vote === null
-            ? $round->candidates()->select('users.id', 'users.name')->orderBy('users.name')->get()
+            ? $round->candidates()->where('users.cant_be_voted', false)->select('users.id', 'users.name')->orderBy('users.name')->get()
             : collect();
 
         return view('voting.index', [

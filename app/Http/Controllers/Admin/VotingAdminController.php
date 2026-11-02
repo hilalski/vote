@@ -47,6 +47,7 @@ class VotingAdminController extends Controller
     {
         $search = $request->string('search')->trim()->toString();
         $resultsVisible = in_array($round->status, [VotingRound::STATUS_CLOSED, VotingRound::STATUS_FINALIZED], true);
+        $rankingsVisible = $round->round_number === 1 || $resultsVisible;
         $votesQuery = Vote::query()
             ->with('voter:id,name,email')
             ->where('round_id', $round->id)
@@ -74,8 +75,9 @@ class VotingAdminController extends Controller
             'round' => $round,
             'turnout' => $results->turnout($round),
             'resultsVisible' => $resultsVisible,
-            'rankings' => $resultsVisible ? $results->rankings($round) : collect(),
-            'candidates' => $resultsVisible ? collect() : $round->candidates()->select('users.id', 'users.name', 'users.email')->orderBy('users.name')->get(),
+            'rankingsVisible' => $rankingsVisible,
+            'rankings' => $rankingsVisible ? $results->rankings($round) : collect(),
+            'candidates' => $rankingsVisible ? collect() : $round->candidates()->where('users.cant_be_voted', false)->select('users.id', 'users.name', 'users.email')->orderBy('users.name')->get(),
             'outcome' => $resultsVisible && $round->round_number === 2 ? $results->roundTwoOutcome($round) : null,
             'votes' => $votes,
             'search' => $search,
@@ -215,11 +217,11 @@ class VotingAdminController extends Controller
 
     public function importActiveVoters(ImportActiveVotersRequest $request, ActiveVoterImportService $importer): RedirectResponse
     {
-        $result = $importer->import($request->file('voters_file'));
+        $result = $importer->import($request->file('voters_file'), $request->user());
 
         return back()->with(
             'success',
-            "Import selesai: {$result['created']} pemilih baru dan {$result['updated']} pemilih diperbarui. Token yang sudah ada tidak diubah.",
+            "Import selesai: {$result['created']} pemilih baru dan {$result['updated']} pemilih diperbarui. {$result['tokens_issued']} token dibuat untuk pemilih baru; token pemilih lama tidak diubah. {$result['added_to_current_round']} pemilih ditambahkan ke putaran yang sedang berjalan.",
         );
     }
 
