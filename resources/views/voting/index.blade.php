@@ -44,8 +44,6 @@
                 </div>
             </div>
         </section>
-        <p class="text-center text-muted small mt-4 mb-0"><a href="{{ route('admin.login') }}">Masuk sebagai
-                administrator</a></p>
     @else
         <section class="card voting-card">
             <div class="card-body">
