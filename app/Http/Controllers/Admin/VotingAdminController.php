@@ -93,10 +93,10 @@ class VotingAdminController extends Controller
         return response()->streamDownload(function () use ($rankings): void {
             $output = fopen('php://output', 'wb');
             fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['Peringkat', 'Kandidat', 'Jumlah Suara']);
+            fputcsv($output, ['Peringkat', 'Kandidat', 'Jumlah Suara'], ';');
 
             foreach ($rankings->values() as $index => $candidate) {
-                fputcsv($output, [$index + 1, $candidate->name, $candidate->total_votes]);
+                fputcsv($output, [$index + 1, $candidate->name, $candidate->total_votes], ';');
             }
 
             fclose($output);
@@ -110,7 +110,7 @@ class VotingAdminController extends Controller
         return response()->streamDownload(function () use ($round): void {
             $output = fopen('php://output', 'wb');
             fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['Waktu (WIB)', 'Pemilih', 'Kandidat Dipilih']);
+            fputcsv($output, ['Waktu (WIB)', 'Pemilih', 'Kandidat Dipilih'], ';');
 
             Vote::query()
                 ->with(['voter:id,name', 'candidate:id,name'])
@@ -118,11 +118,15 @@ class VotingAdminController extends Controller
                 ->orderBy('id')
                 ->chunkById(500, function ($votes) use ($output): void {
                     foreach ($votes as $vote) {
-                        fputcsv($output, [
-                            $vote->created_at->timezone(config('voting.timezone'))->format('d-m-Y H:i:s'),
-                            $vote->voter->name,
-                            $vote->candidate->name,
-                        ]);
+                        fputcsv(
+                            $output,
+                            [
+                                $vote->created_at->timezone(config('voting.timezone'))->format('d-m-Y H:i:s'),
+                                $vote->voter->name,
+                                $vote->candidate->name,
+                            ],
+                            ';',
+                        );
                     }
                 });
 
@@ -313,10 +317,10 @@ class VotingAdminController extends Controller
         return response()->streamDownload(function () use ($rows): void {
             $output = fopen('php://output', 'wb');
             fwrite($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['Nama', 'Email', 'Token']);
+            fputcsv($output, ['Nama', 'Email', 'Token'], ';');
 
             foreach ($rows as $row) {
-                fputcsv($output, $row);
+                fputcsv($output, $row, ';');
             }
 
             fclose($output);

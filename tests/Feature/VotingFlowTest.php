@@ -312,13 +312,13 @@ class VotingFlowTest extends TestCase
             ->get(route('admin.voting.rounds.export.rankings', $round))
             ->assertOk()
             ->assertDownload('peringkat-putaran-1.csv');
-        $this->assertStringContainsString('Peringkat,Kandidat,"Jumlah Suara"', $rankings->streamedContent());
+        $this->assertStringContainsString('Peringkat;Kandidat;"Jumlah Suara"', $rankings->streamedContent());
         $this->assertStringContainsString($voters->get(1)->name, $rankings->streamedContent());
 
         $audit = $this->get(route('admin.voting.rounds.export.audit', $round))
             ->assertOk()
             ->assertDownload('audit-pilihan-putaran-1.csv');
-        $this->assertStringContainsString('"Waktu (WIB)",Pemilih,"Kandidat Dipilih"', $audit->streamedContent());
+        $this->assertStringContainsString('"Waktu (WIB)";Pemilih;"Kandidat Dipilih"', $audit->streamedContent());
         $this->assertStringContainsString($voters->first()->name, $audit->streamedContent());
         $this->assertStringContainsString($voters->get(1)->name, $audit->streamedContent());
     }
@@ -472,7 +472,7 @@ class VotingFlowTest extends TestCase
 
         $this->assertNull(app(VotingTokenService::class)->authenticate($previous['token']));
         $this->assertSame(2, VotingToken::query()->whereNull('revoked_at')->count());
-        $this->assertStringContainsString('Nama,Email,Token', $response->streamedContent());
+        $this->assertStringContainsString('Nama;Email;Token', $response->streamedContent());
         $this->assertStringContainsString($voters->first()->email, $response->streamedContent());
         Mail::assertNothingSent();
     }
@@ -507,7 +507,7 @@ class VotingFlowTest extends TestCase
             ->assertDownload('token-aktif-pemilih.csv');
 
         $this->assertSame($tokenCount, VotingToken::query()->count());
-        $this->assertStringContainsString('Nama,Email,Token', $response->streamedContent());
+        $this->assertStringContainsString('Nama;Email;Token', $response->streamedContent());
         $this->assertStringContainsString($voter->email, $response->streamedContent());
         $this->assertStringContainsString($issued['token'], $response->streamedContent());
     }
