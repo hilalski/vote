@@ -162,9 +162,14 @@ a {
     accent-color: var(--vote-pink-dark);
 }
 
+.vote-submit-area {
+    padding-top: 1.25rem;
+    border-top: 1px dashed #dfe8f6;
+    margin-top: 4rem !important;
+}
+
 .vote-submit-button {
     min-height: 3.25rem;
-    margin-top: 2.5rem;
 }
 
 .candidate-search-wrapper {
@@ -255,6 +260,10 @@ a {
 
     .vote-submit-button {
         min-height: 3.5rem;
-        margin-top: 2rem;
+    }
+
+    .vote-submit-area {
+        padding-top: 1rem;
+        margin-top: 2.5rem !important;
     }
 }

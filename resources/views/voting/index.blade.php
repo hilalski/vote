@@ -112,8 +112,10 @@
                                 <span aria-live="polite" class="visually-hidden" id="candidate-search-status"></span>
                             @endif
                         </fieldset>
-                        <button class="btn btn-primary w-100 vote-submit-button" id="open-confirmation" type="button">Kirim
-                            Suara</button>
+                        <div class="vote-submit-area mt-5">
+                            <button class="btn btn-primary w-100 vote-submit-button" id="open-confirmation" type="button">Kirim
+                                Suara</button>
+                        </div>
                     </form>
                 @else
                     <div class="status-strip rounded p-4"><i class="bi bi-info-circle-fill me-2"></i>{{ $statusMessage }}
