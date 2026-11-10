@@ -162,6 +162,11 @@ a {
     accent-color: var(--vote-pink-dark);
 }
 
+.vote-submit-button {
+    min-height: 3.25rem;
+    margin-top: 2.5rem;
+}
+
 .candidate-search-wrapper {
     position: relative;
 }
@@ -240,5 +245,16 @@ a {
 @media (max-width: 1199px) {
     #main.admin-main {
         margin-left: 0;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .candidate-radio-list {
+        gap: .75rem !important;
+    }
+
+    .vote-submit-button {
+        min-height: 3.5rem;
+        margin-top: 2rem;
     }
 }

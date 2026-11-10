@@ -26,6 +26,7 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
     Route::prefix('voting')->name('voting.')->middleware('voting.admin')->group(function (): void {
         Route::get('/', [VotingAdminController::class, 'index'])->name('dashboard');
         Route::get('/rounds/{round}', [VotingAdminController::class, 'show'])->name('rounds.show');
+        Route::get('/rounds/{round}/audit', [VotingAdminController::class, 'audit'])->name('rounds.audit');
         Route::get('/rounds/{round}/export/rankings', [VotingAdminController::class, 'exportRankings'])->name('rounds.export.rankings');
         Route::get('/rounds/{round}/export/audit', [VotingAdminController::class, 'exportAudit'])->name('rounds.export.audit');
         Route::post('/rounds/{round}/schedule', [VotingAdminController::class, 'schedule'])->name('rounds.schedule');

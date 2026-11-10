@@ -384,8 +384,28 @@ class VotingFlowTest extends TestCase
             ->assertOk()
             ->assertSee('Kandidat Terdaftar')
             ->assertSee('Audit Partisipasi Pemilih')
+            ->assertSee('Audit hasil &amp; partisipasi', false)
             ->assertDontSee('Peringkat Kandidat')
             ->assertDontSee('Kandidat dipilih');
+    }
+
+    public function test_administrator_can_open_a_live_audit_for_an_open_round_two(): void
+    {
+        $voters = User::factory()->count(4)->create();
+        [, $roundTwo] = $this->prepareRoundTwo($voters->all());
+        app(VotingRoundService::class)->open($roundTwo, $voters->first());
+        app(VotingService::class)->cast($voters->first(), $voters->get(1)->id);
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->get(route('admin.voting.rounds.audit', $roundTwo))
+            ->assertOk()
+            ->assertSee('Mode audit')
+            ->assertSee('Peringkat Kandidat')
+            ->assertSee('Audit Pilihan Pemilih')
+            ->assertSee('Kandidat dipilih')
+            ->assertSee($voters->get(1)->name)
+            ->assertDontSee('Export CSV');
     }
 
     public function test_round_two_first_place_tie_does_not_create_a_winner(): void

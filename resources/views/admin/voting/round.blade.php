@@ -6,11 +6,17 @@
         <nav>
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="{{ route('admin.voting.dashboard') }}">Dashboard</a></li>
-                <li class="breadcrumb-item active">Detail putaran</li>
+                <li class="breadcrumb-item active">{{ $auditMode ? 'Audit putaran' : 'Detail putaran' }}</li>
             </ol>
         </nav>
     </div>
     <section class="section">
+        @if ($auditMode)
+            <div class="alert alert-info d-flex align-items-center justify-content-between gap-3" role="alert">
+                <span><i class="bi bi-clipboard-data me-1"></i>Mode audit: hasil dan pilihan pemilih ditampilkan untuk administrator.</span>
+                <a class="btn btn-sm btn-outline-primary" href="{{ route('admin.voting.rounds.show', $round) }}">Kembali</a>
+            </div>
+        @endif
         <div class="row">
             <div class="col-lg-8">
                 <section class="card">
@@ -18,7 +24,7 @@
                         <div class="d-flex align-items-center justify-content-between gap-3">
                             <h5 class="card-title mb-3">{{ $rankingsVisible ? 'Peringkat Kandidat' : 'Kandidat Terdaftar' }}
                             </h5>
-                            @if ($resultsVisible)
+                            @if ($exportsVisible)
                                 <a class="btn btn-sm btn-outline-primary mb-3"
                                     href="{{ route('admin.voting.rounds.export.rankings', $round) }}"><i
                                         class="bi bi-download me-1"></i>Export CSV</a>
@@ -94,8 +100,12 @@
                             <form method="POST" action="{{ route('admin.voting.rounds.open', $round) }}">@csrf<button
                                     class="btn btn-primary w-100" type="submit">Buka Putaran</button></form>
                         @elseif ($round->status === 'open')
-                            <form method="POST" action="{{ route('admin.voting.rounds.close', $round) }}">@csrf<button
-                                    class="btn btn-outline-danger w-100" type="submit">Tutup Putaran</button></form>
+                            <div class="d-grid gap-2">
+                                <a class="btn btn-outline-primary" href="{{ route('admin.voting.rounds.audit', $round) }}"><i
+                                        class="bi bi-clipboard-data me-1"></i>Audit hasil &amp; partisipasi</a>
+                                <form method="POST" action="{{ route('admin.voting.rounds.close', $round) }}">@csrf<button
+                                        class="btn btn-outline-danger w-100" type="submit">Tutup Putaran</button></form>
+                            </div>
                         @elseif ($round->status === 'closed')
                             @if ($round->round_number === 1)
                                 <div class="alert alert-info small"><strong>Tetapkan finalis.</strong> Peringkat hanya
@@ -149,7 +159,7 @@
                 <div class="d-flex align-items-center justify-content-between gap-3">
                     <h5 class="card-title mb-2">
                         {{ $resultsVisible ? 'Audit Pilihan Pemilih' : 'Audit Partisipasi Pemilih' }}</h5>
-                    @if ($resultsVisible)
+                    @if ($exportsVisible)
                         <a class="btn btn-sm btn-outline-primary mb-2"
                             href="{{ route('admin.voting.rounds.export.audit', $round) }}"><i
                                 class="bi bi-download me-1"></i>Export CSV</a>

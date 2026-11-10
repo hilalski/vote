@@ -45,8 +45,19 @@ class VotingAdminController extends Controller
 
     public function show(Request $request, VotingRound $round, VotingResultsService $results): View
     {
+        return $this->roundDetail($request, $round, $results);
+    }
+
+    public function audit(Request $request, VotingRound $round, VotingResultsService $results): View
+    {
+        return $this->roundDetail($request, $round, $results, true);
+    }
+
+    private function roundDetail(Request $request, VotingRound $round, VotingResultsService $results, bool $auditMode = false): View
+    {
         $search = $request->string('search')->trim()->toString();
-        $resultsVisible = in_array($round->status, [VotingRound::STATUS_CLOSED, VotingRound::STATUS_FINALIZED], true);
+        $resultsClosed = in_array($round->status, [VotingRound::STATUS_CLOSED, VotingRound::STATUS_FINALIZED], true);
+        $resultsVisible = $auditMode || $resultsClosed;
         $rankingsVisible = $round->round_number === 1 || $resultsVisible;
         $votesQuery = Vote::query()
             ->with('voter:id,name,email')
@@ -69,11 +80,13 @@ class VotingAdminController extends Controller
             ->latest('created_at')
             ->paginate(25)
             ->withQueryString();
-        $showClosedResults = $resultsVisible && $request->session()->pull('show_closed_results', false);
+        $showClosedResults = $resultsClosed && $request->session()->pull('show_closed_results', false);
 
         return view('admin.voting.round', [
             'round' => $round,
             'turnout' => $results->turnout($round),
+            'auditMode' => $auditMode,
+            'exportsVisible' => $resultsClosed,
             'resultsVisible' => $resultsVisible,
             'rankingsVisible' => $rankingsVisible,
             'rankings' => $rankingsVisible ? $results->rankings($round) : collect(),

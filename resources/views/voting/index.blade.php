@@ -112,7 +112,7 @@
                                 <span aria-live="polite" class="visually-hidden" id="candidate-search-status"></span>
                             @endif
                         </fieldset>
-                        <button class="btn btn-primary w-100 mt-4" id="open-confirmation" type="button">Kirim
+                        <button class="btn btn-primary w-100 vote-submit-button" id="open-confirmation" type="button">Kirim
                             Suara</button>
                     </form>
                 @else
